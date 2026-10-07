@@ -11,6 +11,7 @@ button{font-size:16px;padding:10px 14px;margin:4px 4px 4px 0}
 </style></head><body>
 <video id="v" playsinline muted></video>
 <div><button id="go">Start camera</button><input id="im" type="file" accept="image/*" multiple><button id="rs">Reset</button></div>
+<div id="st">Tap Start camera</div>
 <div id="out"></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
 <script>
@@ -22,11 +23,11 @@ const cv = document.createElement('canvas'), cx = cv.getContext('2d', {willReadF
 function add(b) {
 	const nl = b.indexOf(10);
 	const m = /^(.*) (\d+)\/(\d+)$/.exec(new TextDecoder().decode(b.slice(0, nl)));
-	if (nl < 0 || !m) return false;
+	if (nl < 0 || !m) return 'bad';
 	const f = files[m[1]] ||= {n: +m[3], parts: {}};
-	if (f.parts[m[2]]) return false;
+	if (f.parts[m[2]]) return 'dup';
 	f.parts[m[2]] = b.slice(nl + 1);
-	return true;
+	return 'new';
 }
 
 function show() {
@@ -54,28 +55,49 @@ function show() {
 	}
 }
 
-function tick() {
+const st = {frames: 0, seen: 0, last: ''};
+const bd = window.BarcodeDetector && new BarcodeDetector({formats: ['qr_code']});
+
+// jsQR gives exact bytes; the native detector (if present) rescues dense codes jsQR misses
+async function read(v) {
+	const q = jsQR(cx.getImageData(0, 0, cv.width, cv.height).data, cv.width, cv.height);
+	if (q) return Uint8Array.from(q.binaryData);
+	if (bd) { const r = await bd.detect(cv); if (r.length) return new TextEncoder().encode(r[0].rawValue); }
+}
+
+function got(b) {
+	st.seen++;
+	const r = add(b);
+	st.last = r == 'new' ? 'new chunk' : r == 'dup' ? 'already have it' : 'not a stitch code: ' + JSON.stringify(new TextDecoder().decode(b.slice(0, 30)));
+	if (r == 'new') { navigator.vibrate?.(60); show(); }
+}
+
+async function tick() {
 	const v = $('v');
 	if (v.videoWidth) {
 		cv.width = v.videoWidth; cv.height = v.videoHeight;
 		cx.drawImage(v, 0, 0);
-		const q = jsQR(cx.getImageData(0, 0, cv.width, cv.height).data, cv.width, cv.height);
-		if (q && add(Uint8Array.from(q.binaryData))) { navigator.vibrate?.(60); show(); }
+		st.frames++;
+		try { const b = await read(v); if (b) got(b); } catch (e) { st.last = 'error: ' + e.message; }
+		$('st').textContent = `${v.videoWidth}x${v.videoHeight} | frames ${st.frames} | QR read ${st.seen} | last: ${st.last || 'no QR found yet'}`;
 	}
 	requestAnimationFrame(tick);
 }
 
 $('go').onclick = async () => {
 	const v = $('v');
-	v.srcObject = await navigator.mediaDevices.getUserMedia({video: {facingMode: 'environment', width: {ideal: 1920}}});
-	await v.play(); tick();
+	try {
+		v.srcObject = await navigator.mediaDevices.getUserMedia({video: {facingMode: 'environment', width: {ideal: 1920}}});
+		await v.play(); tick();
+	} catch (e) { $('st').textContent = 'Camera failed: ' + e.message + (isSecureContext ? '' : ' (page must be https)'); }
 };
 $('im').onchange = async e => {
 	for (const f of e.target.files) {
 		const i = await createImageBitmap(f);
 		cv.width = i.width; cv.height = i.height; cx.drawImage(i, 0, 0);
-		const q = jsQR(cx.getImageData(0, 0, cv.width, cv.height).data, cv.width, cv.height);
-		if (q) add(Uint8Array.from(q.binaryData));
+		const b = await read();
+		if (b) got(b); else st.last = f.name + ': no QR found';
+		$('st').textContent = `QR read ${st.seen} | last: ${st.last}`;
 	}
 	show();
 };
