@@ -4,7 +4,7 @@ import java.nio.file.*;
 import java.util.*;
 import javax.imageio.ImageIO;
 
-// java Q.java <file|dir>...  -> qr/NNN.png for every .scala/.txt file, 1000-byte chunks
+// java Q.java <file|dir>...  -> qr/NNN.png for every .scala/.txt file, 700-byte chunks
 public class Q {
 	static final int[] E = {0,7,10,15,20,26,18,20,24,30,18,20,24,26,30,22,24,28,30,28,28,28,28,30,30,26,28,30,30,30,30,30,30,30,30,30,30,30,30,30,30};
 	static final int[] B = {0,1,1,1,1,1,2,2,2,2,4,4,4,4,4,6,6,6,6,7,8,8,9,9,10,12,12,12,13,14,15,16,17,18,19,19,20,21,22,24,25};
@@ -141,11 +141,11 @@ public class Q {
 		int id = 0;
 		for (Path p : fs) {
 			byte[] all = Files.readAllBytes(p);
-			int cnt = Math.max(1, (all.length + 999) / 1000);
+			int cnt = Math.max(1, (all.length + 699) / 700);
 			for (int c = 0; c < cnt; c++) {
 				ByteArrayOutputStream o = new ByteArrayOutputStream();
 				o.write((p + " " + (c + 1) + "/" + cnt + "\n").getBytes());
-				o.write(all, c * 1000, Math.min(1000, all.length - c * 1000));
+				o.write(all, c * 700, Math.min(700, all.length - c * 700));
 				boolean[][] q = qr(o.toByteArray(), -1);
 				BufferedImage im = new BufferedImage((n + 8) * 8, (n + 8) * 8, 1);
 				for (int y = 0; y < im.getHeight(); y++) for (int x = 0; x < im.getWidth(); x++) {

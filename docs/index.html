@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>QR Stitch</title>
+<style>
+body{font:16px system-ui;margin:0;padding:12px;background:#111;color:#eee}
+video{width:100%;background:#000;border-radius:8px}
+button{font-size:16px;padding:10px 14px;margin:4px 4px 4px 0}
+.f{border:1px solid #444;border-radius:8px;padding:8px;margin:8px 0;word-break:break-all}
+.ok{color:#6f6}
+</style></head><body>
+<video id="v" playsinline muted></video>
+<div><button id="go">Start camera</button><input id="im" type="file" accept="image/*" multiple><button id="rs">Reset</button></div>
+<div id="out"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
+<script>
+const files = {}; // path -> {n, parts: {i: Uint8Array}}
+const $ = id => document.getElementById(id);
+const cv = document.createElement('canvas'), cx = cv.getContext('2d', {willReadFrequently: true});
+
+// chunk = "path i/n\n" + raw bytes, as written by Q.java
+function add(b) {
+	const nl = b.indexOf(10);
+	const m = /^(.*) (\d+)\/(\d+)$/.exec(new TextDecoder().decode(b.slice(0, nl)));
+	if (nl < 0 || !m) return false;
+	const f = files[m[1]] ||= {n: +m[3], parts: {}};
+	if (f.parts[m[2]]) return false;
+	f.parts[m[2]] = b.slice(nl + 1);
+	return true;
+}
+
+function show() {
+	$('out').innerHTML = '';
+	for (const [p, f] of Object.entries(files)) {
+		const have = Object.keys(f.parts).length, d = document.createElement('div');
+		d.className = 'f';
+		let s = `<b>${p}</b> ${have}/${f.n}`;
+		if (have < f.n) {
+			const miss = [];
+			for (let i = 1; i <= f.n; i++) if (!f.parts[i]) miss.push(i);
+			s += ` &mdash; missing: ${miss.join(', ')}`;
+		} else s += ' <span class="ok">complete</span>';
+		d.innerHTML = s + '<br>';
+		if (have == f.n) {
+			const blob = new Blob(Array.from({length: f.n}, (_, i) => f.parts[i + 1]));
+			const a = document.createElement('a');
+			a.href = URL.createObjectURL(blob); a.download = p.split(/[\\/]/).pop(); a.textContent = 'Download';
+			const c = document.createElement('button');
+			c.textContent = 'Copy text';
+			c.onclick = async () => navigator.clipboard.writeText(await blob.text());
+			d.append(a, ' ', c);
+		}
+		$('out').append(d);
+	}
+}
+
+function tick() {
+	const v = $('v');
+	if (v.videoWidth) {
+		cv.width = v.videoWidth; cv.height = v.videoHeight;
+		cx.drawImage(v, 0, 0);
+		const q = jsQR(cx.getImageData(0, 0, cv.width, cv.height).data, cv.width, cv.height);
+		if (q && add(Uint8Array.from(q.binaryData))) { navigator.vibrate?.(60); show(); }
+	}
+	requestAnimationFrame(tick);
+}
+
+$('go').onclick = async () => {
+	const v = $('v');
+	v.srcObject = await navigator.mediaDevices.getUserMedia({video: {facingMode: 'environment', width: {ideal: 1920}}});
+	await v.play(); tick();
+};
+$('im').onchange = async e => {
+	for (const f of e.target.files) {
+		const i = await createImageBitmap(f);
+		cv.width = i.width; cv.height = i.height; cx.drawImage(i, 0, 0);
+		const q = jsQR(cx.getImageData(0, 0, cv.width, cv.height).data, cv.width, cv.height);
+		if (q) add(Uint8Array.from(q.binaryData));
+	}
+	show();
+};
+$('rs').onclick = () => { for (const k in files) delete files[k]; show(); };
+</script></body></html>
