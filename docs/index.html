@@ -13,7 +13,7 @@ button{font-size:16px;padding:10px 14px;margin:4px 4px 4px 0}
 <div><button id="go">Start camera</button><input id="im" type="file" accept="image/*" multiple><button id="rs">Reset</button></div>
 <div id="st">Tap Start camera</div>
 <div id="out"></div>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
+<script src="jsQR.js"></script>
 <script>
 const files = {}; // path -> {n, parts: {i: Uint8Array}}
 const $ = id => document.getElementById(id);
